@@ -101,11 +101,14 @@ def run_bot():
 
                 print(f"📥 پیام {msg.id} بررسی شد (آخرین ذخیره‌شده: {last_id})")
 
+                # پیام قبلا پردازش شده
                 if msg.id <= last_id:
                     print("⏭ پیام قبلا پردازش شده بود")
+                    save_last_id(msg.id)
                     time.sleep(15)
                     continue
 
+                # پیام فورواردی
                 if msg.forward_from or msg.forward_from_chat:
                     print("⛔ پیام فورواردی بود")
                     save_last_id(msg.id)
@@ -138,6 +141,7 @@ def run_bot():
                     rb.send_text(target_channel, processed_text)
                     print("✅ متن ارسال شد")
 
+                # ذخیره پیام بعد از ارسال
                 save_last_id(msg.id)
                 print(f"💾 پیام {msg.id} ذخیره شد")
 
@@ -149,7 +153,5 @@ def run_bot():
 
 # ------------------ اجرای همزمان Flask و ربات ------------------
 if __name__ == "__main__":
-    # Thread برای HTTP server (Render)
-    threading.Thread(target=run_flask).start()
-    # Thread اصلی برای ربات
-    run_bot()
+    threading.Thread(target=run_flask).start()  # HTTP server برای Render
+    run_bot()  # اجرای ربات اصلی
