@@ -29,7 +29,7 @@ tg = TgClient("telegram_session", api_id=api_id, api_hash=api_hash)
 STATE_FILE = "last_tg_msg.json"
 REQUIRED_STRING = "🤩 @ADAK_IR"
 MY_TAG = "📲 @League_epror"
-FILTER_WORDS = ["بت", "Https", "اختصاصی", "همسر", "رایگان", "رایگان"]
+FILTER_WORDS = ["بت", "Https", "بانو", "همسر", "اختصاصی", "رایگان"]
 
 # ------------------ مدیریت وضعیت ------------------
 def load_last_id():
