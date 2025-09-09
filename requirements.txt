@@ -2,3 +2,5 @@ pyrogram
 tgcrypto
 pyrubi
 flask
+pillow
+requests
