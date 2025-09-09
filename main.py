@@ -29,7 +29,7 @@ tg = TgClient("telegram_session", api_id=api_id, api_hash=api_hash)
 STATE_FILE = "last_tg_msg.json"
 REQUIRED_STRING = "🤩 @ADAK_IR"
 MY_TAG = "📲 @League_epror"
-FILTER_WORDS = ["بت", "Https", "بانو", "همسر", "رایگان"]
+FILTER_WORDS = ["بت", "Https", "اختصاصی", "همسر", "رایگان", "رایگان"]
 
 # ------------------ مدیریت وضعیت ------------------
 def load_last_id():
@@ -84,15 +84,16 @@ def run_bot():
 
         # فقط بار اول: آخرین پیام کانال رو به عنوان نقطه شروع ذخیره می‌کنیم
         if load_last_id() == 0:
-            last_msg = next(tg.get_chat_history(source_channel, limit=1), None)
+            last_msg = list(tg.get_chat_history(source_channel, limit=1))
             if last_msg:
-                save_last_id(last_msg.id)
-                print(f"⏳ شروع از پیام {last_msg.id} (فقط پیام‌های جدید ارسال خواهند شد)")
+                save_last_id(last_msg[0].id)
+                print(f"⏳ شروع از پیام {last_msg[0].id} (فقط پیام‌های جدید ارسال خواهند شد)")
 
         while True:
             try:
                 last_id = load_last_id()
-                msg = next(tg.get_chat_history(source_channel, limit=1), None)
+                msgs = list(tg.get_chat_history(source_channel, limit=1))
+                msg = msgs[0] if msgs else None
 
                 if not msg:
                     print("⚠️ پیامی پیدا نشد")
@@ -104,7 +105,6 @@ def run_bot():
                 # پیام قبلا پردازش شده
                 if msg.id <= last_id:
                     print("⏭ پیام قبلا پردازش شده بود")
-                    save_last_id(msg.id)
                     time.sleep(15)
                     continue
 
@@ -141,7 +141,7 @@ def run_bot():
                     rb.send_text(target_channel, processed_text)
                     print("✅ متن ارسال شد")
 
-                # ذخیره پیام بعد از ارسال
+                # ذخیره پیام بعد از ارسال موفق
                 save_last_id(msg.id)
                 print(f"💾 پیام {msg.id} ذخیره شد")
 
@@ -151,7 +151,7 @@ def run_bot():
                 print("❌ خطای کلی:", e)
                 time.sleep(20)
 
-# ------------------ اجرای همزمان Flask و ربات ------------------
+# ------------------ اجرای سرور و ربات ------------------
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()  # HTTP server برای Render
-    run_bot()  # اجرای ربات اصلی
+    threading.Thread(target=run_flask).start()
+    run_bot()
