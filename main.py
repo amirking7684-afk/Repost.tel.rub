@@ -20,11 +20,8 @@ def run_flask():
 # ------------------ تنظیمات ربات ------------------
 api_id = 2040
 api_hash = "b18441a1ff607e10a989891a5462e627"
-source_channel = -1001092196973  # آیدی عددی کانال تلگرام
+source_channel = -1001092196973
 target_channel = "c0ByOFi0bc53d8706298ebf89d6604ba"
-
-rb = RbClient("rubika_session")
-tg = TgClient("telegram_session", api_id=api_id, api_hash=api_hash)
 
 STATE_FILE = "last_tg_msg.json"
 REQUIRED_STRING = "🤩 @ADAK_IR"
@@ -48,105 +45,88 @@ def save_last_id(msg_id):
 # ------------------ پردازش متن ------------------
 def process_text(text: str) -> str:
     if not text:
-        print("❌ پیام خالی است")
         return None
-
     if REQUIRED_STRING not in text:
-        print(f"❌ پیام رشته اجباری '{REQUIRED_STRING}' ندارد")
         return None
-
     for word in FILTER_WORDS:
         if word in text:
-            print(f"❌ پیام شامل کلمه فیلتر شده است: {word}")
             return None
-
     lines = text.split("\n")
-    new_lines = []
-    for i in range(len(lines)-1):
-        if lines[i].strip():
-            new_lines.append(f"**{lines[i]}**")
-        else:
-            new_lines.append(lines[i])
-
-    # آخرین خط با تگ شما جایگزین میشه
+    new_lines = [f"**{line}**" if line.strip() else line for line in lines[:-1]]
     new_lines.append(MY_TAG)
     return "\n".join(new_lines)
 
+# ------------------ ایجاد سشن‌ها ------------------
+def create_sessions():
+    tg_client = TgClient("telegram_session", api_id=api_id, api_hash=api_hash)
+    rb_client = RbClient("rubika_session")
+    return tg_client, rb_client
+
+# ------------------ ارسال پایدار به روبیکا ------------------
+def safe_send(rb_client, msg_type, file=None, text=None):
+    for attempt in range(2):
+        try:
+            if msg_type == "text":
+                rb_client.send_text(target_channel, text)
+            elif msg_type == "image":
+                rb_client.send_image(target_channel, file=file, text=text)
+            elif msg_type == "video":
+                rb_client.send_video(target_channel, file=file, text=text)
+            return True
+        except Exception as e:
+            print(f"⚠️ خطا در ارسال به روبیکا (تلاش {attempt+1}):", e)
+            time.sleep(5)
+            rb_client = RbClient("rubika_session")  # reconnect
+    print("❌ ارسال پیام به روبیکا ناموفق بود.")
+    return False
+
 # ------------------ ربات اصلی ------------------
 def run_bot():
+    tg, rb = create_sessions()
     with tg:
         print("🚀 ربات شروع شد")
-        try:
-            chat = tg.get_chat(source_channel)
-            print(f"📡 به کانال وصل شدم: {chat.title}")
-        except Exception as e:
-            print("❌ خطا در اتصال به کانال:", e)
-
-        # فقط بار اول: آخرین پیام کانال رو به عنوان نقطه شروع ذخیره می‌کنیم
         if load_last_id() == 0:
             last_msg = list(tg.get_chat_history(source_channel, limit=1))
             if last_msg:
                 save_last_id(last_msg[0].id)
-                print(f"⏳ شروع از پیام {last_msg[0].id} (فقط پیام‌های جدید ارسال خواهند شد)")
 
         while True:
             try:
                 last_id = load_last_id()
-                msgs = list(tg.get_chat_history(source_channel, limit=1))
-                msg = msgs[0] if msgs else None
+                msgs = list(tg.get_chat_history(source_channel, limit=5))  # بررسی چند پیام آخر
+                for msg in reversed(msgs):  # از قدیمی به جدید
+                    if msg.id <= last_id:
+                        continue
+                    if msg.forward_from or msg.forward_from_chat:
+                        save_last_id(msg.id)
+                        continue
 
-                if not msg:
-                    print("⚠️ پیامی پیدا نشد")
-                    time.sleep(15)
-                    continue
+                    caption = msg.caption or msg.text or ""
+                    processed_text = process_text(caption)
+                    if not processed_text:
+                        save_last_id(msg.id)
+                        continue
 
-                print(f"📥 پیام {msg.id} بررسی شد (آخرین ذخیره‌شده: {last_id})")
+                    success = False
+                    if msg.photo:
+                        file_path = f"/tmp/{msg.id}.jpg"
+                        tg.download_media(msg.photo, file_path)
+                        success = safe_send(rb, "image", file=file_path, text=processed_text)
+                        if success:
+                            os.remove(file_path)
+                    elif msg.video:
+                        file_path = f"/tmp/{msg.id}.mp4"
+                        tg.download_media(msg.video, file_path)
+                        success = safe_send(rb, "video", file=file_path, text=processed_text)
+                        if success:
+                            os.remove(file_path)
+                    else:
+                        success = safe_send(rb, "text", text=processed_text)
 
-                # پیام قبلا پردازش شده
-                if msg.id <= last_id:
-                    print("⏭ پیام قبلا پردازش شده بود")
-                    time.sleep(15)
-                    continue
+                    if success:
+                        save_last_id(msg.id)
 
-                # پیام فورواردی
-                if msg.forward_from or msg.forward_from_chat:
-                    print("⛔ پیام فورواردی بود")
-                    save_last_id(msg.id)
-                    continue
-
-                caption = msg.caption or msg.text or ""
-                processed_text = process_text(caption)
-
-                if not processed_text:
-                    print("⛔ پیام شرایط ارسال را نداشت")
-                    save_last_id(msg.id)
-                    continue
-
-                # ارسال عکس
-                if msg.photo:
-                    file_path = os.path.join(os.getcwd(), f"{msg.id}.jpg")
-                    tg.download_media(msg.photo, file_path)
-                    rb.send_image(target_channel, file=file_path, text=processed_text)
-                    os.remove(file_path)
-                    print("✅ عکس + کپشن ارسال شد")
-                # ارسال ویدیو
-                elif msg.video:
-                    file_path = os.path.join(os.getcwd(), f"{msg.id}.mp4")
-                    tg.download_media(msg.video, file_path)
-                    rb.send_video(target_channel, file=file_path, text=processed_text)
-                    os.remove(file_path)
-                    print("✅ ویدیو + کپشن ارسال شد")
-                # فقط متن
-                else:
-                    rb.send_text(target_channel, processed_text)
-                    print("✅ متن ارسال شد")
-
-                # ذخیره پیام بعد از ارسال موفق
-                save_last_id(msg.id)
-                print(f"💾 پیام {msg.id} ذخیره شد")
-
-                time.sleep(15)
-
+                time.sleep(10)
             except Exception as e:
                 print("❌ خطای کلی:", e)
                 time.sleep(20)
